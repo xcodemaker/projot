@@ -1,28 +1,38 @@
-const express=require('express');
+const express=require('express'),
+path=require('path');
 var exphbs  = require('express-handlebars'),
 methodOverride = require('method-override'),
 flash=require('connect-flash'),
 session=require('express-session'),
 bodyParser=require('body-parser'),
-mongoose=require('mongoose');
+mongoose=require('mongoose'),
+passport=require('passport')
 
 const app =express();
 
-const port=5000;
+//load routes
+const ideas=require('./routes/ideas');
+const users=require('./routes/users');
+
+//pasport config
+require('./config/passport')(passport);
+//DB config
+
+const db=require('./config/database');
+
+const port=process.env.PORT  || 5000;
 
 //map global promise
 mongoose.Promise=global.Promise;
 
 //connect database
 
-mongoose.connect('mongodb://localhost/vidjot-dev',{
+mongoose.connect(db.mongoURI,{
     //useMongoClient:true
 }).then(()=> console.log('MongoDB Connected...'))
 .catch(err=> console.log(err));
 
-// load idea  modal
-require('./models/Idea');
-const Idea=mongoose.model('ideas');
+
 
 // handlebars middleware
 
@@ -37,6 +47,8 @@ app.use(bodyParser.urlencoded({ extended: false }));
 // parse application/json
 app.use(bodyParser.json());
 
+//static folder
+app.use(express.static(path.join(__dirname,'public')));
 
 //Method override middleware
 app.use(methodOverride('_method'));
@@ -47,6 +59,11 @@ app.use(session({
     resave: true,
     saveUninitialized: true
   }));
+
+//passport middleware
+app.use(passport.initialize());
+app.use(passport.session());
+
 //flash middleware
 app.use(flash());
 
@@ -54,6 +71,7 @@ app.use(function(req,res,next){
     res.locals.success_msg=req.flash('success_msg');
     res.locals.error_msg=req.flash('error_msg');
     res.locals.error=req.flash('error');
+    res.locals.user=req.user || null;
     next(); 
 });
 
@@ -74,101 +92,14 @@ app.get('/about',(req,res)=>{
     res.render('about');
 });
 
-//Idea index page
-
-app.get('/ideas',(req,res)=>{
-    Idea.find({})
-    .sort({date:'desc'})
-    .then(ideas=>{
-        res.render('ideas/index',{
-            ideas:ideas
-        });
-    })
-   
-});
-
-// add ideas route
-app.get('/ideas/add',(req,res)=>{
-    res.render('ideas/add');
-});
-
-//edit ideas route
-// add ideas route
-app.get('/ideas/edit/:id',(req,res)=>{
-    Idea.findOne({
-        _id: req.params.id
-    })
-    .then(idea=>{
-        res.render('ideas/edit',{
-            idea:idea
-        });
-    });
-   
-});
-
-//process form
-
-app.post('/ideas',(req,res)=>{
-    let errors =[];
-    if(!req.body.title){
-        errors.push({text:'Please add a title.'}); //server side validation
-    }
-    if(!req.body.details){
-        errors.push({text:'Please add dome details.'}); //server side validation
-    }
-    
-    if(errors.length>0){
-        res.render('ideas/add',{
-            errors:errors,
-            title:req.body.title,
-            details:req.body.details
-        });
-    }else{
-        const userNew={
-            title:req.body.title,
-            details:req.body.details
-        };
-     new Idea(userNew)
-     .save()
-     .then(idea=>{
-         req.flash('success_msg','Video idea added.');
-        res.redirect('/ideas');
-     });     
-    }
-   
-    
-});
-
-//edit process form
-app.put('/ideas/:id',(req,res)=>{
-    Idea.findOne({
-        _id: req.params.id
-    }).then(idea=>{
-        idea.title=req.body.title;
-        idea.details=req.body.details;
-
-        idea.save()
-        .then(idea=>{
-            req.flash('success_msg','Video idea updated.')
-            res.redirect('/ideas');
-        })
-
-    });
-   
-});
 
 
-//delete process form
-app.delete('/ideas/:id',(req,res)=>{
-    Idea.remove({
-        _id: req.params.id
-    })
-        .then(()=>{ 
-            req.flash('success_msg','Video idea removed');
-            res.redirect('/ideas');
-        });
+ 
 
- });
+ //use routes
+ app.use('/ideas',ideas);
+ app.use('/users',users);
+
    
 
 
